@@ -325,6 +325,17 @@ export class UIManager {
                   <input type="text" class="form-input" placeholder="e.g., MIT, Harvard University">
                 </div>
                 <div class="form-group">
+                  <label class="form-label">Learning Materials</label>
+                  <div class="file-upload" id="file-upload">
+                    <div class="file-upload-icon">📁</div>
+                    <p><strong>Click to upload</strong> or drag and drop</p>
+                    <p style="font-size: 0.875rem; color: #64748B;">
+                      Audio recordings, text files, PDFs, or notes
+                    </p>
+                  </div>
+                  <input type="file" id="file-input" multiple accept=".txt,.pdf,.mp3,.wav,.m4a" style="display: none;">
+                </div>
+                <div class="form-group">
                   <label class="form-label">Additional Notes (Optional)</label>
                   <textarea class="form-input form-textarea" placeholder="Any specific topics or areas you want to focus on..."></textarea>
                 </div>
