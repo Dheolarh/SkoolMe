@@ -572,18 +572,34 @@ body.dark .chat-input {
     gap: 1rem;
     padding: 1rem;
   }
-  
+
   .course-sidebar {
     position: static;
     order: 2;
   }
-  
+
   .welcome-title {
     font-size: 2rem;
   }
-  
+
+  .header {
+    padding: 1rem; /* Adjust padding for smaller screens */
+  }
+
   .header-content {
-    flex-direction: column;
+    flex-direction: row; /* Keep header items in a row on tablets */
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .header-logo {
+    font-size: 1.3rem; /* Slightly reduce logo font size */
+  }
+}
+
+@media (max-width: 480px) {
+  .header-content {
+    flex-direction: column; /* Stack header items on small screens */
     gap: 1rem;
   }
 }
