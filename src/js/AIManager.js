@@ -6,6 +6,8 @@ export class AIManager {
     this.genAI = null
     this.model = null
     this.chatSession = null
+    this.lastSubspaceSuggestion = 0 // Timestamp of last subspace suggestion
+    this.subspaceCooldown = 60000 // 1 minute cooldown between suggestions
   }
 
   async init() {
@@ -233,6 +235,44 @@ Are you ready to begin your first lesson? Or do you have any questions about the
         await this.startChatSession(context)
       }
 
+      if (context.inSubspace) {
+        // Handle subspace conversation
+        const subspacePrompt = `This is a focused discussion about "${context.topic}". 
+The student just said: "${message}"
+
+Previous conversation in this subspace:
+${context.subspaceHistory ? context.subspaceHistory.map(msg => `${msg.type}: ${msg.content}`).join('\n') : ''}
+
+Please provide a detailed, helpful response that addresses their question about this specific topic. 
+Be thorough and use examples where appropriate. If the student seems to understand and says things like 
+"I get it", "okay I understand", "thanks that makes sense", then suggest returning to the main chat.
+
+Student message: ${message}`
+
+        if (this.shouldCloseSubspace(message)) {
+          return {
+            content: "Perfect! It looks like you've got a good grasp of this concept now. Let's return to the main course where we can continue with the next topics!",
+            closeSubspace: true,
+          };
+        }
+        
+        const result = await this.chatSession.sendMessage(subspacePrompt);
+        const response = await result.response;
+        const responseText = response.text();
+        
+        // Check if AI suggests closing based on understanding
+        if (this.detectUnderstanding(message, responseText)) {
+          return {
+            content: responseText,
+            closeSubspace: true,
+          };
+        }
+        
+        return {
+          content: responseText,
+        };
+      }
+
       // Check topic completion
       const completion = this.checkTopicCompletion(message, context)
       
@@ -333,17 +373,50 @@ You can now download your complete course materials for future reference.`
   }
 
   detectComplexTopic(userMessage, aiResponse) {
-    const complexityIndicators = [
-      'complex', 'difficult', 'confused', 'don\'t understand', 
-      'explain more', 'break down', 'elaborate', 'clarify'
+    // Check cooldown - don't suggest subspace if one was suggested recently
+    const now = Date.now();
+    if (now - this.lastSubspaceSuggestion < this.subspaceCooldown) {
+      return false;
+    }
+
+    const confusionIndicators = [
+      'i don\'t understand', 'don\'t understand', 'confused', 'confusing',
+      'what do you mean', 'can you explain', 'explain more', 'i\'m lost',
+      'makes no sense', 'doesn\'t make sense', 'clarify', 'break it down',
+      'elaborate', 'what does that mean', 'i need help', 'struggling with',
+      'hard to follow', 'difficult to understand', 'this is hard',
+      'i\'m confused about', 'not clear', 'unclear'
+    ]
+    
+    const questionIndicators = [
+      'how does', 'why does', 'what happens when', 'what if',
+      'can you show me', 'give me an example', 'walk me through',
+      'how do i', 'what\'s the difference', 'compared to'
     ]
     
     const userText = userMessage.toLowerCase()
-    const responseText = aiResponse.toLowerCase()
     
-    return complexityIndicators.some(indicator => 
-      userText.includes(indicator) || responseText.includes(indicator)
-    ) && aiResponse.length > 200
+    // Check for direct confusion indicators (highest priority)
+    const hasConfusion = confusionIndicators.some(indicator => 
+      userText.includes(indicator)
+    )
+    
+    // Check for complex questions (medium priority)
+    const hasComplexQuestion = questionIndicators.some(indicator => 
+      userText.includes(indicator)
+    ) && userText.length > 25 // Longer questions are more likely to be complex
+    
+    // Check AI response length as indicator of complexity (low priority)
+    const aiResponseIsLong = aiResponse.length > 400
+    
+    // Only suggest subspace for genuine confusion or very complex topics
+    const shouldSuggest = hasConfusion || (hasComplexQuestion && aiResponseIsLong)
+    
+    if (shouldSuggest) {
+      this.lastSubspaceSuggestion = now;
+    }
+    
+    return shouldSuggest;
   }
 
   async createSubspaceResponse(topic, question, context) {
@@ -408,6 +481,54 @@ Context: This is part of the course "${courseTitle}"`
       hasQuestions: hasQuestions,
       confidence: wantsToContinue ? 0.8 : 0.3
     }
+  }
+
+  shouldCloseSubspace(userMessage) {
+    const closeKeywords = [
+      'okay i understand now',
+      'i get it now',
+      'got it',
+      'i understand',
+      'makes sense now',
+      'that makes sense',
+      'thanks that helps',
+      'thank you',
+      'that clears it up',
+      'close',
+      'exit',
+      'back to main chat',
+      'return to main chat'
+    ];
+    const userText = userMessage.toLowerCase();
+    return closeKeywords.some(keyword => userText.includes(keyword));
+  }
+
+  detectUnderstanding(userMessage, aiResponse) {
+    const understandingIndicators = [
+      'understand',
+      'makes sense',
+      'clear now',
+      'got it',
+      'i see',
+      'that helps',
+      'thanks',
+      'perfect'
+    ];
+    
+    const userText = userMessage.toLowerCase();
+    const aiText = aiResponse.toLowerCase();
+    
+    // Check if user shows understanding
+    const userUnderstands = understandingIndicators.some(indicator => 
+      userText.includes(indicator)
+    );
+    
+    // Check if AI detects understanding and suggests moving back
+    const aiSuggestsReturn = aiText.includes('return to main') || 
+                            aiText.includes('back to main') ||
+                            aiText.includes('continue with');
+    
+    return userUnderstands || aiSuggestsReturn;
   }
 
   updateCourseProgress(courseContext, currentTopicIndex) {

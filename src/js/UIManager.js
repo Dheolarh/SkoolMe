@@ -971,7 +971,228 @@ Are you ready to begin your first lesson?`
   }
 
   createSubspace(question, course) {
-    alert(`Subspace created for: "${question}"\n\nThis feature will open a focused discussion area for complex topics.`)
+    // Create subspace overlay
+    const subspaceOverlay = document.createElement('div')
+    subspaceOverlay.className = 'subspace-overlay'
+    subspaceOverlay.id = 'subspace-overlay'
+    
+    subspaceOverlay.innerHTML = `
+      <div class="subspace-container">
+        <div class="subspace-header">
+          <div class="subspace-title">
+            <span class="subspace-icon">🔍</span>
+            Focused Discussion
+          </div>
+          <div class="subspace-controls">
+            <button class="btn btn-secondary" id="close-subspace-btn">✕ Close</button>
+          </div>
+        </div>
+        
+        <div class="subspace-topic">
+          <div class="topic-label">Discussing:</div>
+          <div class="topic-text">${question}</div>
+        </div>
+        
+        <div class="subspace-chat">
+          <div class="subspace-messages" id="subspace-messages">
+            <div class="message ai">
+              <div class="message-avatar">🤖</div>
+              <div class="message-content">
+                Let's dive deeper into this topic. I'm here to help you understand it completely. What specific part would you like me to explain first?
+              </div>
+            </div>
+          </div>
+          
+          <div class="subspace-input-container">
+            <form class="subspace-input-form" id="subspace-input-form">
+              <input 
+                type="text" 
+                class="subspace-input" 
+                id="subspace-input"
+                placeholder="Ask your question here..."
+                autocomplete="off"
+              >
+              <button type="submit" class="btn btn-primary">Send</button>
+            </form>
+          </div>
+        </div>
+      </div>
+    `
+    
+    document.body.appendChild(subspaceOverlay)
+    
+    // Initialize subspace functionality
+    this.initializeSubspace(question, course)
+    
+    // Animate in
+    setTimeout(() => {
+      subspaceOverlay.classList.add('active')
+    }, 10)
+  }
+
+  initializeSubspace(question, course) {
+    const subspaceInput = document.getElementById('subspace-input')
+    const subspaceForm = document.getElementById('subspace-input-form')
+    const closeBtn = document.getElementById('close-subspace-btn')
+    const messagesContainer = document.getElementById('subspace-messages')
+    
+    // Store subspace context
+    this.subspaceContext = {
+      active: true,
+      topic: question,
+      course: course,
+      messages: []
+    }
+    
+    // Handle form submission
+    subspaceForm.addEventListener('submit', async (e) => {
+      e.preventDefault()
+      const message = subspaceInput.value.trim()
+      if (!message) return
+      
+      // Add user message
+      this.addSubspaceMessage('user', message)
+      subspaceInput.value = ''
+      
+      // Store message in context
+      this.subspaceContext.messages.push({ type: 'user', content: message })
+      
+      // Show typing indicator
+      this.showSubspaceTypingIndicator()
+      
+      try {
+        // Generate AI response
+        const context = {
+          inSubspace: true,
+          topic: question,
+          course: course,
+          subspaceHistory: this.subspaceContext.messages
+        }
+        
+        const response = await this.aiManager.generateResponse(message, context)
+        
+        // Hide typing indicator
+        this.hideSubspaceTypingIndicator()
+        
+        // Add AI response
+        this.addSubspaceMessage('ai', response.content)
+        this.subspaceContext.messages.push({ type: 'ai', content: response.content })
+        
+        // Check if should close subspace
+        if (response.closeSubspace) {
+          this.showReturnToMainChat()
+        }
+        
+      } catch (error) {
+        this.hideSubspaceTypingIndicator()
+        this.addSubspaceMessage('ai', 'I apologize, but I\'m having trouble responding right now. Please try again.')
+      }
+    })
+    
+    // Handle close button
+    closeBtn.addEventListener('click', () => {
+      this.closeSubspace()
+    })
+    
+    // Handle escape key
+    document.addEventListener('keydown', (e) => {
+      if (e.key === 'Escape' && this.subspaceContext?.active) {
+        this.closeSubspace()
+      }
+    })
+    
+    // Focus input
+    subspaceInput.focus()
+  }
+
+  addSubspaceMessage(type, content) {
+    const messagesContainer = document.getElementById('subspace-messages')
+    const messageDiv = document.createElement('div')
+    messageDiv.className = `message ${type} slide-up`
+    
+    const avatar = type === 'ai' ? '🤖' : '👤'
+    
+    messageDiv.innerHTML = `
+      <div class="message-avatar">${avatar}</div>
+      <div class="message-content">${this.formatAIResponse(content)}</div>
+    `
+    
+    messagesContainer.appendChild(messageDiv)
+    messagesContainer.scrollTop = messagesContainer.scrollHeight
+  }
+
+  showSubspaceTypingIndicator() {
+    const messagesContainer = document.getElementById('subspace-messages')
+    const typingDiv = document.createElement('div')
+    typingDiv.className = 'message ai typing-indicator'
+    typingDiv.id = 'subspace-typing-indicator'
+    typingDiv.innerHTML = `
+      <div class="message-avatar">🤖</div>
+      <div class="message-content">
+        <div class="typing-dots">
+          <span></span>
+          <span></span>
+          <span></span>
+        </div>
+      </div>
+    `
+    
+    messagesContainer.appendChild(typingDiv)
+    messagesContainer.scrollTop = messagesContainer.scrollHeight
+  }
+
+  hideSubspaceTypingIndicator() {
+    const typingIndicator = document.getElementById('subspace-typing-indicator')
+    if (typingIndicator) {
+      typingIndicator.remove()
+    }
+  }
+
+  showReturnToMainChat() {
+    const messagesContainer = document.getElementById('subspace-messages')
+    const returnDiv = document.createElement('div')
+    returnDiv.className = 'message ai slide-up'
+    returnDiv.innerHTML = `
+      <div class="message-avatar">🎯</div>
+      <div class="message-content">
+        Great! It looks like you understand the concept now. Would you like to return to the main chat to continue with your course?
+        <br><br>
+        <button class="btn btn-primary" id="return-to-main-btn" style="margin-top: 0.5rem;">
+          ↩️ Return to Main Chat
+        </button>
+      </div>
+    `
+    
+    messagesContainer.appendChild(returnDiv)
+    messagesContainer.scrollTop = messagesContainer.scrollHeight
+    
+    document.getElementById('return-to-main-btn').addEventListener('click', () => {
+      this.returnToMainChat()
+    })
+  }
+
+  returnToMainChat() {
+    // Add summary message to main chat
+    const summaryMessage = `We had a great focused discussion about "${this.subspaceContext.topic}". Now let's continue with your course!`
+    
+    // Close subspace
+    this.closeSubspace()
+    
+    // Add continuation message to main chat
+    setTimeout(() => {
+      this.addMessageToUI('ai', summaryMessage)
+    }, 300)
+  }
+
+  closeSubspace() {
+    const subspaceOverlay = document.getElementById('subspace-overlay')
+    if (subspaceOverlay) {
+      subspaceOverlay.classList.remove('active')
+      setTimeout(() => {
+        subspaceOverlay.remove()
+        this.subspaceContext = null
+      }, 300)
+    }
   }
 
   showAboutModal() {
