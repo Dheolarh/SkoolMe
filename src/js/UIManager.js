@@ -1,8 +1,13 @@
+import { Packer } from 'docx';
+import { saveAs } from 'file-saver';
+import { Document, Paragraph, HeadingLevel, TableOfContents, TextRun } from 'docx';
+
 export class UIManager {
   constructor(aiManager = null) {
     this.app = document.getElementById('app')
     this.isDarkMode = localStorage.getItem('darkMode') === 'true'
     this.aiManager = aiManager
+    this.isSidebarOpen = false;
   }
 
   init() {
@@ -52,6 +57,11 @@ export class UIManager {
     header.innerHTML = `
       <div class="container">
         <div class="header-content">
+          <button class="btn btn-icon hamburger-menu" id="hamburger-menu">
+            <span></span>
+            <span></span>
+            <span></span>
+          </button>
           <div class="header-logo">🎓 SkoolMe!</div>
           <div class="header-actions">
             <button class="btn btn-icon" id="theme-toggle">
@@ -69,7 +79,30 @@ export class UIManager {
       document.dispatchEvent(new CustomEvent('toggle-theme'))
       document.getElementById('theme-toggle').innerHTML = this.isDarkMode ? '🌙' : '☀️'
     })
+
+    document.getElementById('hamburger-menu').addEventListener('click', () => {
+      this.toggleSidebar();
+    });
   }
+
+  toggleSidebar() {
+    const sidebar = document.getElementById('course-sidebar');
+    const hamburger = document.getElementById('hamburger-menu');
+    const overlay = document.getElementById('sidebar-overlay');
+    if (sidebar) {
+      this.isSidebarOpen = !this.isSidebarOpen;
+      if (this.isSidebarOpen) {
+        sidebar.classList.add('open');
+        hamburger.classList.add('open');
+        overlay.classList.add('open');
+      } else {
+        sidebar.classList.remove('open');
+        hamburger.classList.remove('open');
+        overlay.classList.remove('open');
+      }
+    }
+  }
+
 
   showWelcomeScreen() {
     this.app.innerHTML = `
@@ -93,6 +126,9 @@ export class UIManager {
         </div>
       </div>
     `
+    document.getElementById('hamburger-menu').style.display = 'none';
+    document.querySelector('.header-content').classList.add('no-hamburger');
+
 
     document.getElementById('get-started-btn').addEventListener('click', () => {
       this.showLoginModal()
@@ -250,6 +286,10 @@ export class UIManager {
       }
     `
     document.head.appendChild(style)
+    document.getElementById('hamburger-menu').style.display = 'none';
+    document.querySelector('.header-content').classList.add('no-hamburger');
+
+
 
     document.getElementById('new-course-btn').addEventListener('click', () => {
       document.dispatchEvent(new CustomEvent('start-new-course'))
@@ -348,6 +388,9 @@ export class UIManager {
         </div>
       </div>
     `
+    document.getElementById('hamburger-menu').style.display = 'none';
+    document.querySelector('.header-content').classList.add('no-hamburger');
+
 
     // File upload handling
     const fileUpload = document.getElementById('file-upload')
@@ -500,9 +543,10 @@ export class UIManager {
 
   showCourseInterface(course, aiManager) {
     this.app.innerHTML = `
+      <div class="sidebar-overlay" id="sidebar-overlay"></div>
       <div class="main-content">
         <div class="course-interface fade-in">
-          <div class="course-sidebar">
+          <div class="course-sidebar" id="course-sidebar">
             <div class="course-progress">
               <h3 class="progress-title">📊 Progress</h3>
               <div class="progress-bar">
@@ -531,16 +575,15 @@ export class UIManager {
             <div class="chat-header">
               <h2 class="chat-title">${course.outline?.title || course.title || 'Untitled Course'}</h2>
               <div class="chat-actions">
-                <button class="btn btn-secondary" id="download-course-btn">📥 Download Course</button>
+                <button class="btn btn-icon" id="download-course-btn">📥</button>
               </div>
             </div>
             <div class="chat-container">
               <div class="chat-messages" id="chat-messages">
-                <!-- Messages will be loaded here -->
-              </div>
+                </div>
               <div class="chat-input-container">
                 <form class="chat-input-form" id="chat-form">
-                  <textarea class="chat-input" placeholder="Ask a question or type 'continue' to proceed..." rows="1"></textarea>
+                  <textarea class="chat-input" placeholder="Ask a question to proceed..." rows="1"></textarea>
                   <button type="submit" class="btn btn-primary">Send</button>
                 </form>
               </div>
@@ -549,6 +592,9 @@ export class UIManager {
         </div>
       </div>
     `
+    document.getElementById('hamburger-menu').style.display = 'flex';
+    document.querySelector('.header-content').classList.remove('no-hamburger');
+
 
     // Add chat container styles
     const chatStyles = document.createElement('style')
@@ -608,51 +654,31 @@ export class UIManager {
       
       /* Mobile Responsive Styles */
       @media (max-width: 768px) {
-        .course-interface {
-          flex-direction: column;
-        }
-        .course-sidebar {
-          width: 100%;
-          max-height: 200px;
-          overflow-y: auto;
-        }
         .course-main {
           flex: 1;
+          width: 100%;
         }
         .chat-header {
-          flex-direction: column;
-          align-items: flex-start;
-          gap: 0.75rem;
+          flex-direction: row;
+          align-items: center;
         }
         .chat-title {
           font-size: 1.1rem;
-          white-space: normal;
-          overflow: visible;
-          text-overflow: unset;
         }
         .chat-actions {
           margin-left: 0;
-          align-self: flex-end;
         }
         .chat-container {
-          height: calc(100vh - 280px);
+          height: calc(100vh - 200px);
         }
         .chat-messages {
-          max-height: calc(100vh - 380px);
-        }
-        .lesson-timeline {
-          max-height: 120px;
-          overflow-y: auto;
-        }
-        .lesson-list {
-          font-size: 0.875rem;
+          max-height: calc(100vh - 300px);
         }
         .chat-input-form {
-          flex-direction: column;
-          gap: 0.5rem;
+          flex-direction: row;
         }
         .chat-input {
-          min-height: 60px;
+          min-height: 40px;
         }
       }
       
@@ -669,9 +695,6 @@ export class UIManager {
         .chat-input-container {
           padding: 0.75rem;
         }
-        .course-sidebar {
-          max-height: 150px;
-        }
       }
     `
     document.head.appendChild(chatStyles)
@@ -683,6 +706,10 @@ export class UIManager {
     document.getElementById('new-course-btn').addEventListener('click', () => {
       document.dispatchEvent(new CustomEvent('start-new-course'))
     })
+
+    document.getElementById('sidebar-overlay').addEventListener('click', () => {
+        this.toggleSidebar();
+    });
 
     // Download course functionality
     document.getElementById('download-course-btn').addEventListener('click', () => {
@@ -727,10 +754,8 @@ export class UIManager {
     if (aiManager) {
       await aiManager.startChatSession(course)
       
-      // Get the correct title
       const courseTitle = course.outline?.title || course.title || 'your course'
       
-      // Add welcome message with formatting
       const welcomeMessage = `Welcome to your personalized course on "${courseTitle}"! 🎉
       
 I've analyzed your materials and created a structured learning path. Let's start with the fundamentals and build your understanding step by step.
@@ -745,34 +770,28 @@ Are you ready to begin your first lesson?`
     this.addMessageToUI(type, content)
     
     if (type === 'user' && aiManager) {
-      // Show typing indicator
       this.showTypingIndicator()
       
       try {
         const response = await aiManager.generateResponse(content, course)
         this.hideTypingIndicator()
         
-        // Format the AI response
         const formattedContent = this.formatAIResponse(response.content)
         this.addMessageToUI('ai', formattedContent)
         
-        // Handle progress updates
         if (response.progressUpdate) {
           this.updateLessonStatus(response.progressUpdate.lessonCompleted)
           this.updateProgressBar(response.progressUpdate.newProgress)
         }
         
-        // Handle video suggestions
         if (response.suggestedVideos && response.suggestedVideos.length > 0) {
           this.showVideoSuggestions(response.suggestedVideos)
         }
         
-        // Handle follow-up questions
         if (response.followUpQuestions && response.followUpQuestions.length > 0) {
           this.showFollowUpQuestions(response.followUpQuestions)
         }
         
-        // Handle subspace creation if needed
         if (response.needsSubspace) {
           this.suggestSubspace(content, course)
         }
@@ -793,7 +812,6 @@ Are you ready to begin your first lesson?`
       lessonItems[lessonIndex].classList.add('completed')
     }
     
-    // Update active lesson to next one
     if (lessonItems[lessonIndex + 1]) {
       lessonItems.forEach(item => item.classList.remove('active'))
       lessonItems[lessonIndex + 1].classList.add('active')
@@ -846,7 +864,6 @@ Are you ready to begin your first lesson?`
     messagesContainer.appendChild(typingDiv)
     messagesContainer.scrollTop = messagesContainer.scrollHeight
     
-    // Add typing animation styles
     if (!document.getElementById('typing-styles')) {
       const style = document.createElement('style')
       style.id = 'typing-styles'
@@ -921,7 +938,6 @@ Are you ready to begin your first lesson?`
     messagesContainer.appendChild(questionsDiv)
     messagesContainer.scrollTop = messagesContainer.scrollHeight
     
-    // Add click handlers for follow-up questions
     questionsDiv.querySelectorAll('.follow-up-btn').forEach(btn => {
       btn.addEventListener('click', () => {
         const question = btn.dataset.question
@@ -955,7 +971,6 @@ Are you ready to begin your first lesson?`
   }
 
   createSubspace(question, course) {
-    // This would create a new subspace interface
     alert(`Subspace created for: "${question}"\n\nThis feature will open a focused discussion area for complex topics.`)
   }
 
@@ -1002,70 +1017,109 @@ Are you ready to begin your first lesson?`
   }
 
   downloadCourse(course) {
-    // Collect all chat messages
-    const chatMessages = document.querySelectorAll('.message')
-    let conversationText = ''
+    const courseTitle = course.outline?.title || course.title || 'Untitled Course';
+    const children = [
+        new Paragraph({
+            text: courseTitle,
+            heading: HeadingLevel.TITLE,
+            alignment: 'center',
+        }),
+        new Paragraph({}), // Spacer
+        new TableOfContents("Course Outline", {
+            hyperlink: true,
+            headingStyleRange: "2-2",
+        }),
+        new Paragraph({}), // Spacer
+    ];
+
+    // Note: A true grouping of chat messages per topic is complex without changing the data model.
+    // This implementation will list the lessons and then show the full conversation.
+    (course.lessons || []).forEach(lesson => {
+        children.push(
+            new Paragraph({
+                text: lesson.title,
+                heading: HeadingLevel.HEADING_2,
+                style: "MySpectacularStyle",
+            })
+        );
+        if(lesson.content) {
+            children.push(
+                new Paragraph({
+                    children: [
+                        new TextRun({ text: "Content: ", bold: true }),
+                        new TextRun(lesson.content),
+                    ],
+                })
+            );
+        }
+        if(lesson.objectives && lesson.objectives.length > 0) {
+            children.push(
+                new Paragraph({
+                    children: [
+                        new TextRun({ text: "Learning Objectives:", bold: true }),
+                    ],
+                })
+            );
+            lesson.objectives.forEach(obj => children.push(new Paragraph({ text: obj, bullet: { level: 0 } })));
+        }
+         if(lesson.keyTerms && lesson.keyTerms.length > 0) {
+            children.push(
+                new Paragraph({
+                    children: [
+                        new TextRun({ text: "Key Terms:", bold: true }),
+                    ],
+                })
+            );
+            lesson.keyTerms.forEach(term => children.push(new Paragraph({ text: term, bullet: { level: 0 } })));
+        }
+        children.push(new Paragraph({})); // Spacer
+    });
+
+    children.push(
+        new Paragraph({
+            text: "Learning Conversation",
+            heading: HeadingLevel.HEADING_1,
+        })
+    );
     
+    const chatMessages = document.querySelectorAll('.message');
     chatMessages.forEach(message => {
-      const type = message.classList.contains('ai') ? 'AI Tutor' : 'Student'
-      const content = message.querySelector('.message-content').textContent
-      conversationText += `${type}: ${content}\n\n`
-    })
-    
-    // Create course document content
-    const courseTitle = course.outline?.title || course.title || 'Untitled Course'
-    const courseContent = `
-# ${courseTitle}
+        const type = message.classList.contains('ai') ? 'AI Tutor' : 'Student';
+        const content = message.querySelector('.message-content').innerText;
+        children.push(
+            new Paragraph({
+                children: [
+                    new TextRun({ text: `${type}: `, bold: true }),
+                    new TextRun(content),
+                ],
+            })
+        );
+        children.push(new Paragraph({})); // Spacer
+    });
 
-## Course Overview
-- **Description:** ${course.outline?.description || 'AI-generated course'}
-- **Duration:** ${course.outline?.duration || 'Variable'}
-- **Difficulty:** ${course.outline?.difficulty || 'Intermediate'}
-- **Progress:** ${Math.round(course.progress || 0)}% completed
 
-## Course Timeline
+    const doc = new Document({
+        styles: {
+            paragraphStyles: [{
+                id: "MySpectacularStyle",
+                name: "My Spectacular Style",
+                basedOn: "Heading2",
+                next: "Heading2",
+                quickFormat: true,
+                run: {
+                    color: "990000",
+                },
+            }, ],
+        },
+        sections: [{
+            children: children
+        }],
+    });
 
-${(course.lessons || []).map((lesson, index) => `
-### ${index + 1}. ${lesson.title} ${lesson.completed ? '✅' : '📖'}
-- **Type:** ${lesson.type || 'lesson'}
-- **Duration:** ${lesson.duration || 45} minutes
-- **Status:** ${lesson.completed ? 'Completed' : 'Not Started'}
-
-${lesson.objectives ? `**Learning Objectives:**
-${lesson.objectives.map(obj => `- ${obj}`).join('\n')}` : ''}
-
-${lesson.content ? `**Content:**
-${lesson.content}` : ''}
-
-${lesson.keyTerms && lesson.keyTerms.length > 0 ? `**Key Terms:**
-${lesson.keyTerms.map(term => `- ${term}`).join('\n')}` : ''}
-
----
-`).join('\n')}
-
-## Learning Conversation
-
-${conversationText}
-
-## Course Summary
-This course was generated and personalized by SkoolMe AI. All interactions and learning materials have been captured for your offline study.
-
-Generated on: ${new Date().toLocaleDateString()}
-`
-
-    // Create and download the file
-    const blob = new Blob([courseContent], { type: 'text/plain' })
-    const url = URL.createObjectURL(blob)
-    const a = document.createElement('a')
-    a.href = url
-    a.download = `${courseTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_course.txt`
-    document.body.appendChild(a)
-    a.click()
-    document.body.removeChild(a)
-    URL.revokeObjectURL(url)
-    
-    // Show success message
-    this.showDownloadSuccess(courseTitle)
+    Packer.toBlob(doc).then(blob => {
+        saveAs(blob, `${courseTitle.replace(/[^a-z0-9]/gi, '_').toLowerCase()}_course.docx`);
+        this.showDownloadSuccess(courseTitle);
+    });
   }
 
   showDownloadSuccess(courseTitle) {
@@ -1078,7 +1132,6 @@ Generated on: ${new Date().toLocaleDateString()}
       </div>
     `
     
-    // Add notification styles
     const style = document.createElement('style')
     style.textContent = `
       .download-notification {
@@ -1126,7 +1179,6 @@ Generated on: ${new Date().toLocaleDateString()}
     document.head.appendChild(style)
     document.body.appendChild(notification)
     
-    // Remove notification after 3 seconds
     setTimeout(() => {
       notification.remove()
       style.remove()
@@ -1134,25 +1186,17 @@ Generated on: ${new Date().toLocaleDateString()}
   }
 
   formatAIResponse(content) {
-    // Remove excessive symbols and format the response
     let formatted = content
-      // Remove multiple asterisks
       .replace(/\*\*\*+/g, '')
       .replace(/\*\*/g, '')
       .replace(/\*/g, '')
-      // Remove other excessive symbols
       .replace(/#{2,}/g, '')
       .replace(/_{2,}/g, '')
       .replace(/~{2,}/g, '')
-      // Format headers and important text
       .replace(/^([A-Z][^.!?]*:)/gm, '<strong style="font-size: 1.1em; color: var(--primary-purple);">$1</strong>')
-      // Format numbered lists
       .replace(/^\d+\.\s+(.+)/gm, '<strong>$1</strong>')
-      // Format bullet points
       .replace(/^[-•]\s+(.+)/gm, '<strong>• $1</strong>')
-      // Format questions
       .replace(/^(.+\?)/gm, '<strong style="color: var(--primary-purple);">$1</strong>')
-      // Add line breaks for better readability
       .replace(/\n\n/g, '<br><br>')
       .replace(/\n/g, '<br>')
     
