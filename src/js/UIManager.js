@@ -1,6 +1,7 @@
 import { Packer } from 'docx';
 import { saveAs } from 'file-saver';
 import { Document, Paragraph, HeadingLevel, TableOfContents, TextRun } from 'docx';
+import { SkoolMeAPI } from './SkoolMeAPI.js';
 
 export class UIManager {
   constructor(aiManager = null) {
@@ -8,6 +9,7 @@ export class UIManager {
     this.isDarkMode = localStorage.getItem('darkMode') === 'true'
     this.aiManager = aiManager
     this.isSidebarOpen = false;
+    this.api = new SkoolMeAPI();
   }
 
   init() {
@@ -62,7 +64,7 @@ export class UIManager {
             <span></span>
             <span></span>
           </button>
-          <div class="header-logo">🎓 SkoolMe!</div>
+          <div class="header-logo" id="header-logo" style="cursor:pointer;">🎓 SkoolMe!</div>
           <div class="header-actions">
             <button class="btn btn-icon" id="theme-toggle">
               ${this.isDarkMode ? '☀️' : '🌙'}
@@ -73,7 +75,7 @@ export class UIManager {
     `
     
     document.body.insertBefore(header, this.app)
-    
+
     // Add event listeners
     document.getElementById('theme-toggle').addEventListener('click', () => {
       document.dispatchEvent(new CustomEvent('toggle-theme'))
@@ -82,6 +84,11 @@ export class UIManager {
 
     document.getElementById('hamburger-menu').addEventListener('click', () => {
       this.toggleSidebar();
+    });
+
+    // Reload page when logo is clicked
+    document.getElementById('header-logo').addEventListener('click', () => {
+      window.location.reload();
     });
   }
 
@@ -355,33 +362,158 @@ export class UIManager {
           <div class="course-creation fade-in">
             <div class="creation-step">
               <h2 class="step-title">📚 Create Your Course</h2>
-              <form id="course-form">
+              
+              <!-- Course Creation Method Selection -->
+              <div class="creation-method-selector">
+                <h3>How would you like to create your course?</h3>
+                <div class="method-options">
+                  <div class="method-option" data-method="title">
+                    <div class="method-icon">✏️</div>
+                    <h4>Title Only</h4>
+                    <p>Create a course with just a title</p>
+                  </div>
+                  <div class="method-option" data-method="upload">
+                    <div class="method-icon">📁</div>
+                    <h4>Upload Files</h4>
+                    <p>Upload documents and audio files for analysis</p>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Course Form -->
+              <form id="course-form" style="display: none;">
+                <!-- Course Title Input -->
                 <div class="form-group">
                   <label class="form-label">Course Title</label>
-                  <input type="text" class="form-input" placeholder="e.g., Introduction to Physics" required>
+                  <input type="text" 
+                         id="course-title-input" 
+                         class="form-input" 
+                         placeholder="e.g., Introduction to Physics" 
+                         required>
                 </div>
+
+                <!-- School/Institution Input -->
                 <div class="form-group">
                   <label class="form-label">School/Institution (Optional)</label>
-                  <input type="text" class="form-input" placeholder="e.g., MIT, Harvard University">
+                  <input type="text" 
+                         id="school-input" 
+                         class="form-input" 
+                         placeholder="e.g., MIT, Harvard University">
                 </div>
-                <div class="form-group">
+
+                <!-- File Upload Section (for upload method) -->
+                <div class="form-group" id="file-upload-section" style="display: none;">
                   <label class="form-label">Learning Materials</label>
                   <div class="file-upload" id="file-upload">
                     <div class="file-upload-icon">📁</div>
                     <p><strong>Click to upload</strong> or drag and drop</p>
                     <p style="font-size: 0.875rem; color: #64748B;">
-                      Audio recordings, text files, PDFs, or notes
+                      Documents: .txt, .pdf, .docx, .png, .jpg, .jpeg, .bmp (max 100MB)<br>
+                      Audio: .mp3, .wav, .m4a (max 50MB)
                     </p>
                   </div>
-                  <input type="file" id="file-input" multiple accept=".txt,.pdf,.mp3,.wav,.m4a" style="display: none;">
+                  <input type="file" 
+                         id="file-input" 
+                         multiple 
+                         accept=".txt,.pdf,.docx,.png,.jpg,.jpeg,.bmp,.mp3,.wav,.m4a" 
+                         style="display: none;">
+                  
+                  <!-- Uploaded Files Display -->
+                  <div id="uploaded-files-display" style="display: none;">
+                    <h4>Uploaded Files:</h4>
+                    <div id="files-list"></div>
+                  </div>
                 </div>
-                <div class="form-group">
+
+                <!-- Extracted Content Section (for upload method) - Always visible when upload method is selected -->
+                <div class="form-group" id="content-display-section" style="display: none;">
+                  <label class="form-label">Extracted Content</label>
+                  <div class="content-display-container">
+                    <textarea id="content-display" 
+                              class="content-display-textarea" 
+                              readonly 
+                              placeholder="Content will be extracted and displayed here after analysis..."></textarea>
+                  </div>
+                </div>
+
+                <!-- Additional Notes Section (for upload method) - Always visible when upload method is selected -->
+                <div class="form-group" id="additional-notes-section" style="display: none;">
                   <label class="form-label">Additional Notes (Optional)</label>
-                  <textarea class="form-input form-textarea" placeholder="Any specific topics or areas you want to focus on..."></textarea>
+                  <textarea id="course-notes" 
+                            class="form-input form-textarea" 
+                            placeholder="Any specific focus areas or additional context for course generation..."></textarea>
                 </div>
-                <button type="submit" class="btn btn-primary" style="width: 100%;">
-                  🚀 Create Course with AI
-                </button>
+
+                <!-- Course Title Section (for upload method) - Shows after analysis -->
+                <div class="form-group" id="course-title-section" style="display: none;">
+                  <label class="form-label">Course Title *</label>
+                  <input type="text" 
+                         id="manual-course-title" 
+                         class="form-input" 
+                         placeholder="Enter your course title..." 
+                         required>
+                </div>
+
+                <!-- Analysis Section -->
+                <div id="analysis-section" style="display: none;">
+                  <div class="analysis-header">
+                    <h4>File Analysis</h4>
+                    <p>Analyzing your uploaded files to generate course content...</p>
+                  </div>
+                  
+                  <!-- Progress Bar -->
+                  <div class="progress-container">
+                    <div class="progress-bar">
+                      <div class="progress-fill" id="progress-fill"></div>
+                    </div>
+                    <div class="progress-text" id="progress-text">Preparing analysis...</div>
+                  </div>
+                  
+                  <!-- Analysis Results -->
+                  <div id="analysis-results" style="display: none;">
+                    <div class="analysis-summary">
+                      <h5>Analysis Summary</h5>
+                      <div id="overall-score" class="score-display"></div>
+                    </div>
+
+                    <!-- Course Generation Section -->
+                    <div id="course-generation-section" style="display: none;">
+                      <h5>Generate Course</h5>
+                      <div class="course-generation-container">
+                        <button id="generate-course-btn" class="btn btn-primary">
+                          <span class="btn-text">Generate Course Structure</span>
+                          <div class="btn-loader" style="display: none;"></div>
+                        </button>
+                      </div>
+                    </div>
+
+                    <!-- Course Structure Display -->
+                    <div id="course-structure-section" style="display: none;">
+                      <h5>Generated Course Structure</h5>
+                      <div id="course-structure-display"></div>
+                    </div>
+                    
+                    <div class="files-analysis">
+                      <h5>Individual File Results</h5>
+                      <div id="file-results"></div>
+                    </div>
+                  </div>
+                </div>
+
+                <!-- Action Buttons -->
+                <div class="form-actions">
+                  <button type="button" 
+                          id="analyze-btn" 
+                          class="btn btn-secondary" 
+                          style="display: none;">
+                    🔍 Analyze Files
+                  </button>
+                  <button type="submit" 
+                          id="create-course-btn" 
+                          class="btn btn-primary">
+                    🚀 Create Course
+                  </button>
+                </div>
               </form>
             </div>
           </div>
@@ -391,154 +523,612 @@ export class UIManager {
     document.getElementById('hamburger-menu').style.display = 'none';
     document.querySelector('.header-content').classList.add('no-hamburger');
 
+    // Add CSS to force visibility of analysis sections
+    const analysisStyles = document.createElement('style');
+    analysisStyles.textContent = `
+      #content-display-section.visible,
+      #content-display-section[style*="display: block"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+      
+      #additional-notes-section.visible,
+      #additional-notes-section[style*="display: block"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+      
+      #course-title-section.visible,
+      #course-title-section[style*="display: block"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+      
+      #course-generation-section.visible,
+      #course-generation-section[style*="display: block"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+      
+      #analysis-results.visible,
+      #analysis-results[style*="display: block"] {
+        display: block !important;
+        visibility: visible !important;
+        opacity: 1 !important;
+      }
+      
+      .content-display-textarea {
+        width: 100%;
+        min-height: 120px;
+        padding: 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 14px;
+        line-height: 1.5;
+        resize: vertical;
+      }
+      
+      .course-generation-container {
+        background: #f8fafc;
+        padding: 20px;
+        border-radius: 8px;
+        border: 1px solid #e2e8f0;
+        margin: 15px 0;
+      }
+      
+      .course-generation-container .form-group {
+        margin-bottom: 15px;
+      }
+      
+      .course-generation-container .form-label {
+        font-weight: 600;
+        margin-bottom: 8px;
+        color: #374151;
+      }
+      
+      .course-generation-container .form-input {
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-size: 14px;
+      }
+      
+      .course-generation-container .form-textarea {
+        min-height: 100px;
+        resize: vertical;
+      }
+      
+      .form-textarea {
+        min-height: 100px;
+        resize: vertical;
+        width: 100%;
+        padding: 10px 12px;
+        border: 1px solid #d1d5db;
+        border-radius: 6px;
+        font-family: inherit;
+        font-size: 14px;
+        line-height: 1.5;
+      }
+    `;
+    document.head.appendChild(analysisStyles);
+
+    // Initialize course creation functionality
+    this.initializeCourseCreation();
+  }
+
+  initializeCourseCreation() {
+    let currentMethod = null;
+    let uploadedFiles = [];
+    let sessionId = null;
+    let analysisComplete = false;
+
+    // Method selection
+    const methodOptions = document.querySelectorAll('.method-option');
+    const courseForm = document.getElementById('course-form');
+    const fileUploadSection = document.getElementById('file-upload-section');
+    const courseTitleInput = document.getElementById('course-title-input');
+    const analyzeBtn = document.getElementById('analyze-btn');
+    const createCourseBtn = document.getElementById('create-course-btn');
+
+    methodOptions.forEach(option => {
+      option.addEventListener('click', () => {
+        // Remove previous selection
+        methodOptions.forEach(opt => opt.classList.remove('selected'));
+        
+        // Select current option
+        option.classList.add('selected');
+        currentMethod = option.dataset.method;
+        
+        // Show form
+        courseForm.style.display = 'block';
+        
+        // Configure form based on method
+        const manualCourseTitleInput = document.getElementById('manual-course-title');
+        if (currentMethod === 'title') {
+          // Hide upload-related sections
+          fileUploadSection.style.display = 'none';
+          document.getElementById('content-display-section').style.display = 'none';
+          document.getElementById('additional-notes-section').style.display = 'none';
+          document.getElementById('course-title-section').style.display = 'none';
+          
+          // Show title input section
+          courseTitleInput.parentElement.style.display = 'block';
+          courseTitleInput.disabled = false;
+          courseTitleInput.required = true;
+          
+          // Fix: Make manual-course-title not required
+          if (manualCourseTitleInput) manualCourseTitleInput.required = false;
+          
+          // Configure buttons
+          analyzeBtn.style.display = 'none';
+          createCourseBtn.style.display = 'block';
+          createCourseBtn.textContent = '🚀 Create Course';
+          createCourseBtn.disabled = false;
+        } else if (currentMethod === 'upload') {
+          // Show upload-related sections
+          fileUploadSection.style.display = 'block';
+          document.getElementById('content-display-section').style.display = 'block';
+          document.getElementById('additional-notes-section').style.display = 'block';
+          
+          // Hide title input section initially (shows after analysis)
+          document.getElementById('course-title-section').style.display = 'none';
+          courseTitleInput.parentElement.style.display = 'none';
+          courseTitleInput.disabled = true;
+          courseTitleInput.required = false;
+          courseTitleInput.placeholder = 'Title will be generated after analysis';
+          
+          // Fix: Make manual-course-title required
+          if (manualCourseTitleInput) manualCourseTitleInput.required = true;
+          
+          // Configure buttons
+          analyzeBtn.style.display = 'block';
+          createCourseBtn.style.display = 'none';
+        }
+      });
+    });
 
     // File upload handling
-    const fileUpload = document.getElementById('file-upload')
-    const fileInput = document.getElementById('file-input')
+    const fileUpload = document.getElementById('file-upload');
+    const fileInput = document.getElementById('file-input');
+    const uploadedFilesDisplay = document.getElementById('uploaded-files-display');
+    const filesList = document.getElementById('files-list');
 
     fileUpload.addEventListener('click', () => {
-      fileInput.click()
-    })
+      if (currentMethod === 'upload') {
+        fileInput.click();
+      }
+    });
+
+    fileUpload.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      if (currentMethod === 'upload') {
+        fileUpload.classList.add('drag-over');
+      }
+    });
+
+    fileUpload.addEventListener('dragleave', () => {
+      fileUpload.classList.remove('drag-over');
+    });
+
+    fileUpload.addEventListener('drop', (e) => {
+      e.preventDefault();
+      fileUpload.classList.remove('drag-over');
+      
+      if (currentMethod === 'upload') {
+        const files = Array.from(e.dataTransfer.files);
+        handleFileSelection(files);
+      }
+    });
 
     fileInput.addEventListener('change', (e) => {
-      const files = Array.from(e.target.files)
-      if (files.length > 0) {
-        fileUpload.innerHTML = `
-          <div class="file-upload-icon">✅</div>
-          <p><strong>${files.length} file(s) selected</strong></p>
-          <p style="font-size: 0.875rem; color: #64748B;">
-            ${files.map(f => f.name).join(', ')}
-          </p>
-        `
-      }
-    })
+      const files = Array.from(e.target.files);
+      handleFileSelection(files);
+    });
 
-    document.getElementById('course-form').addEventListener('submit', async (e) => {
-      e.preventDefault()
+    function handleFileSelection(files) {
+      if (files.length === 0) return;
+
+      // Validate files using API client
+      const validation = SkoolMeAPI.validateFiles(files);
       
-      const submitButton = e.target.querySelector('button[type="submit"]')
-      const originalText = submitButton.textContent
-      submitButton.textContent = 'Generating Course...'
-      submitButton.disabled = true
+      if (validation.invalid.length > 0) {
+        const errors = validation.invalid.map(item => 
+          `${item.file.name}: ${item.error}`
+        ).join('\n');
+        
+        alert('File validation errors:\n' + errors);
+        return;
+      }
+
+      uploadedFiles = validation.valid.map(item => item.file);
+      displayUploadedFiles();
+      
+      // Update upload area
+      fileUpload.innerHTML = `
+        <div class="file-upload-icon">✅</div>
+        <p><strong>${uploadedFiles.length} file(s) selected</strong></p>
+        <p style="font-size: 0.875rem; color: #64748B;">
+          Click to change selection
+        </p>
+      `;
+      
+      // Show uploaded files and enable analyze button
+      uploadedFilesDisplay.style.display = 'block';
+      analyzeBtn.disabled = false;
+      
+      // Reset analysis state
+      analysisComplete = false;
+      document.getElementById('analysis-section').style.display = 'none';
+    }
+
+    function displayUploadedFiles() {
+      filesList.innerHTML = uploadedFiles.map(file => {
+        const fileSize = SkoolMeAPI.formatFileSize(file.size);
+        const fileIcon = SkoolMeAPI.getFileIcon(file.name);
+        
+        return `
+          <div class="file-item">
+            <div class="file-info">
+              <span class="file-icon">${fileIcon}</span>
+              <span class="file-name">${file.name}</span>
+              <span class="file-size">${fileSize}</span>
+            </div>
+            <div class="file-status">⏳ Ready</div>
+          </div>
+        `;
+      }).join('');
+    }
+
+    // Clear previous analysis function
+    function clearPreviousAnalysis() {
+      // Clear analysis results
+      const analysisResults = document.getElementById('analysis-results');
+      if (analysisResults) {
+        analysisResults.innerHTML = '';
+      }
+      
+      // Reset course structure section
+      const courseStructureSection = document.getElementById('course-structure-section');
+      if (courseStructureSection) {
+        courseStructureSection.style.display = 'none';
+      }
+      
+      // Reset course structure display
+      const courseStructureDisplay = document.getElementById('course-structure-display');
+      if (courseStructureDisplay) {
+        courseStructureDisplay.innerHTML = '';
+      }
+      
+      // Reset progress bar
+      const progressFill = document.getElementById('progress-fill');
+      const progressText = document.getElementById('progress-text');
+      if (progressFill) {
+        progressFill.style.width = '0%';
+      }
+      if (progressText) {
+        progressText.textContent = 'Starting analysis...';
+      }
+      
+      // Reset course title inputs
+      const manualCourseTitleInput = document.getElementById('manual-course-title');
+      if (manualCourseTitleInput) {
+        manualCourseTitleInput.value = '';
+      }
+      
+      // Reset course notes
+      const courseNotesInput = document.getElementById('course-notes');
+      if (courseNotesInput) {
+        courseNotesInput.value = '';
+      }
+      
+      // Reset create course button
+      const createCourseBtn = document.getElementById('create-course-btn');
+      if (createCourseBtn) {
+        createCourseBtn.style.display = 'none';
+        createCourseBtn.disabled = true;
+      }
+      
+      // Remove processing note if it exists
+      const processingNote = document.querySelector('.processing-note');
+      if (processingNote) {
+        processingNote.remove();
+      }
+    }
+
+    // Analysis button handler
+    analyzeBtn.addEventListener('click', async () => {
+      if (uploadedFiles.length === 0) {
+        alert('Please select files to analyze');
+        return;
+      }
+
+      analyzeBtn.disabled = true;
+      analyzeBtn.textContent = 'Analyzing...';
       
       try {
-        const courseData = {
-          title: e.target.querySelector('input[placeholder*="Introduction"]').value,
-          school: e.target.querySelector('input[placeholder*="MIT"]').value,
-          files: Array.from(fileInput.files),
-          notes: e.target.querySelector('textarea').value
+        // Clear previous analysis results and UI
+        clearPreviousAnalysis();
+        analysisComplete = false;
+        
+        // Show analysis section
+        document.getElementById('analysis-section').style.display = 'block';
+        
+        // Add processing note
+        const analysisSection = document.getElementById('analysis-section');
+        const processingNote = document.createElement('div');
+        processingNote.className = 'processing-note';
+        processingNote.innerHTML = `
+          <strong>⏱️ Processing Time Note:</strong><br>
+          • Documents: Usually 10-30 seconds<br>
+          • Audio files: 1-2 minutes per minute of audio<br>
+          • Larger files may take longer - progress is tracked in real-time
+        `;
+        analysisSection.appendChild(processingNote);
+        
+        // Upload files first
+        const uploadResult = await this.api.uploadFiles(uploadedFiles);
+        sessionId = uploadResult.session_id;
+        
+        // Update file status
+        const fileItems = document.querySelectorAll('.file-item .file-status');
+        fileItems.forEach(item => {
+          item.textContent = '✅ Uploaded';
+          item.style.color = 'green';
+        });
+        
+        // Start analysis
+        await this.api.startAnalysis(sessionId);
+        
+        // Poll for progress
+        await this.api.pollAnalysis(sessionId, (progress) => {
+          updateProgress(progress);
+        });
+        
+      } catch (error) {
+        console.error('Analysis failed:', error);
+        alert('Analysis failed: ' + error.message);
+        
+        // Reset analysis section
+        document.getElementById('analysis-section').style.display = 'none';
+        analyzeBtn.disabled = false;
+        analyzeBtn.textContent = '🔍 Analyze Files';
+      }
+    });
+
+    const updateProgress = (progress) => {
+      const progressFill = document.getElementById('progress-fill');
+      const progressText = document.getElementById('progress-text');
+      const analysisResults = document.getElementById('analysis-results');
+      
+      // Update progress bar
+      progressFill.style.width = `${progress.progress}%`;
+      progressText.textContent = progress.message;
+      
+      // Update file status
+      if (progress.results) {
+        updateFileResults(progress.results);
+      }
+      
+      if (progress.status === 'completed') {
+        analysisComplete = true;
+        
+        // Show results
+        displayAnalysisResults(progress);
+        
+        // Enable course creation
+        createCourseBtn.style.display = 'block';
+        createCourseBtn.disabled = false;
+        createCourseBtn.textContent = '🚀 Create Course';
+        
+        // Auto-fill title
+        if (progress.generated_title) {
+          courseTitleInput.value = progress.generated_title;
         }
         
-        // Get AI manager instance - we need to pass it or access it
-        const aiManager = this.aiManager || window.aiManager
+        // Reset analyze button
+        analyzeBtn.disabled = false;
+        analyzeBtn.textContent = '🔍 Re-analyze Files';
+        
+      } else if (progress.status === 'error') {
+        throw new Error(progress.error || 'Analysis failed');
+      }
+    };
+
+    function updateFileResults(results) {
+      const fileItems = document.querySelectorAll('.file-item');
+      
+      results.forEach((result, index) => {
+        if (fileItems[index]) {
+          const statusElement = fileItems[index].querySelector('.file-status');
+          const statusText = result.status === 'error' ? '❌ Error' : '🔄 Processing';
+          statusElement.textContent = statusText;
+          statusElement.style.color = result.status === 'error' ? 'red' : 'orange';
+        }
+      });
+    }
+
+    const uiManager = this; // Store reference to the UI manager instance
+
+    // Make displayAnalysisResults accessible globally for debugging
+    window.displayAnalysisResults = (progress) => {
+      uiManager.displayAnalysisResults(progress, sessionId, analysisComplete);
+    };
+
+    // Form submission
+    document.getElementById('course-form').addEventListener('submit', async (e) => {
+      e.preventDefault();
+      
+      if (currentMethod === 'upload' && !analysisComplete) {
+        alert('Please complete file analysis before creating the course');
+        return;
+      }
+      
+      const submitButton = e.target.querySelector('button[type="submit"]');
+      const originalText = submitButton.textContent;
+      submitButton.textContent = 'Creating Course...';
+      submitButton.disabled = true;
+      
+      try {
+        // Get the correct form elements based on the method
+        let title, notes;
+        
+        if (currentMethod === 'upload') {
+          // For upload method, use the manual course title, extracted content, and notes
+          const manualTitleInput = document.getElementById('manual-course-title');
+          const courseNotesInput = document.getElementById('course-notes');
+          const contentDisplay = document.getElementById('content-display');
+          
+          if (!manualTitleInput || !manualTitleInput.value.trim()) {
+            alert('Please enter a course title in the course generation section');
+            submitButton.textContent = originalText;
+            submitButton.disabled = false;
+            return;
+          }
+          
+          if (!contentDisplay || !contentDisplay.value.trim()) {
+            alert('No content available for course generation. Please ensure files have been analyzed.');
+            submitButton.textContent = originalText;
+            submitButton.disabled = false;
+            return;
+          }
+          
+          title = manualTitleInput.value.trim();
+          notes = courseNotesInput ? courseNotesInput.value.trim() : '';
+          const extractedContent = contentDisplay.value.trim();
+          
+          // For upload method, use the backend API to generate course structure
+          try {
+            const response = await fetch('http://localhost:5000/api/generate-course', {
+              method: 'POST',
+              headers: {
+                'Content-Type': 'application/json',
+              },
+              body: JSON.stringify({
+                session_id: sessionId,
+                course_title: title,
+                extracted_content: extractedContent,
+                additional_notes: notes
+              })
+            });
+            
+            const result = await response.json();
+            
+            if (result.success) {
+              // Display the course structure
+              this.displayCourseStructure(result.course_structure);
+              
+              // Create course object for the AI manager
+              const courseData = {
+                title: title,
+                school: document.getElementById('school-input') ? document.getElementById('school-input').value : '',
+                notes: notes,
+                method: currentMethod,
+                sessionId: sessionId,
+                files: uploadedFiles.map(f => f.name),
+                course_structure: result.course_structure
+              };
+              
+              // Get AI manager instance
+              const aiManager = this.aiManager || window.aiManager;
+              if (!aiManager) {
+                throw new Error('AI Manager not available');
+              }
+              
+              // Generate course content with AI using the course structure
+              const generatedCourse = await aiManager.generateCourseContent(courseData);
+              
+              // Clean up session if files were uploaded
+              if (sessionId) {
+                this.api.cleanupSession(sessionId)
+                  .catch(err => console.warn('Cleanup failed:', err));
+              }
+              
+              // Dispatch event with generated course
+              document.dispatchEvent(new CustomEvent('course-created', {
+                detail: generatedCourse
+              }));
+              
+              return; // Exit early since we handled the upload method
+            } else {
+              throw new Error(result.error || 'Course generation failed');
+            }
+          } catch (error) {
+            console.error('Course generation error:', error);
+            alert('Failed to generate course: ' + error.message);
+            submitButton.textContent = originalText;
+            submitButton.disabled = false;
+        return;
+      }
+        } else {
+          // For title-only method, use the main form inputs
+          const titleInput = document.getElementById('course-title-input');
+          const notesInput = document.getElementById('course-notes');
+          
+          console.log('Title-only method - checking form elements:');
+          console.log('Title input:', titleInput);
+          console.log('Notes input:', notesInput);
+          console.log('Title value:', titleInput ? titleInput.value : 'null');
+          
+          if (!titleInput || !titleInput.value.trim()) {
+            alert('Please enter a course title');
+            submitButton.textContent = originalText;
+            submitButton.disabled = false;
+            return;
+          }
+          
+          title = titleInput.value.trim();
+          notes = notesInput ? notesInput.value.trim() : '';
+          
+          console.log('Form data - Title:', title, 'Notes:', notes);
+        }
+        
+        const courseData = {
+          title: title,
+          school: document.getElementById('school-input') ? document.getElementById('school-input').value : '',
+          notes: notes,
+          method: currentMethod,
+          sessionId: sessionId,
+          files: uploadedFiles.map(f => f.name)
+        };
+        
+        // Get AI manager instance
+        const aiManager = this.aiManager || window.aiManager;
+        console.log('AI Manager check:', aiManager);
+        console.log('this.aiManager:', this.aiManager);
+        console.log('window.aiManager:', window.aiManager);
+        
         if (!aiManager) {
-          throw new Error('AI Manager not available')
+          throw new Error('AI Manager not available');
         }
         
         // Generate course content with AI
-        const generatedCourse = await aiManager.generateCourseContent(courseData)
+        const generatedCourse = await aiManager.generateCourseContent(courseData);
+        
+        // Clean up session if files were uploaded
+        if (sessionId) {
+          this.api.cleanupSession(sessionId)
+            .catch(err => console.warn('Cleanup failed:', err));
+        }
         
         // Dispatch event with generated course
         document.dispatchEvent(new CustomEvent('course-created', {
           detail: generatedCourse
-        }))
+        }));
         
       } catch (error) {
-        console.error('Error generating course:', error)
+        console.error('Error creating course:', error);
+        alert('Failed to create course: ' + error.message);
         
-        // Get courseData for fallback
-        const courseData = {
-          title: e.target.querySelector('input[placeholder*="Introduction"]').value,
-          school: e.target.querySelector('input[placeholder*="MIT"]').value,
-          files: Array.from(fileInput.files),
-          notes: e.target.querySelector('textarea').value
-        }
-        
-        // Fallback course structure
-        const fallbackCourse = {
-          outline: {
-            title: courseData.title,
-            description: `A comprehensive course on ${courseData.title}`,
-            duration: '4-6 hours',
-            difficulty: 'Intermediate'
-          },
-          lessons: [
-            {
-              id: 1,
-              title: `Introduction to ${courseData.title}`,
-              type: 'lesson',
-              completed: true,
-              content: `Welcome to ${courseData.title}! Let's begin your learning journey.`,
-              duration: 30,
-              objectives: [`Understand the basics of ${courseData.title}`, 'Get familiar with course structure'],
-              keyTerms: []
-            },
-            {
-              id: 2,
-              title: 'Core Concepts',
-              type: 'lesson',
-              completed: false,
-              content: 'We\'ll explore the fundamental concepts and principles.',
-              duration: 45,
-              objectives: ['Master core concepts', 'Apply fundamental principles'],
-              keyTerms: []
-            },
-            {
-              id: 3,
-              title: 'Mid-Course Assessment',
-              type: 'test',
-              completed: false,
-              questions: [
-                {
-                  id: 1,
-                  type: 'multiple-choice',
-                  question: 'What is the main focus of this course?',
-                  options: ['Theory', 'Practice', 'Both', 'Neither'],
-                  correct: 2
-                }
-              ],
-              timeLimit: 30
-            },
-            {
-              id: 4,
-              title: 'Advanced Topics',
-              type: 'lesson',
-              completed: false,
-              content: 'Dive deeper into advanced concepts and applications.',
-              duration: 45,
-              objectives: ['Understand advanced concepts', 'Apply knowledge practically'],
-              keyTerms: []
-            },
-            {
-              id: 5,
-              title: 'Final Examination',
-              type: 'exam',
-              completed: false,
-              questions: [
-                {
-                  id: 1,
-                  type: 'essay',
-                  question: 'Explain the key concepts covered in this course.',
-                  points: 25
-                }
-              ],
-              timeLimit: 60
-            }
-          ],
-          assessments: {
-            midTest: { questions: 5, timeLimit: 30, passingScore: 70 },
-            finalExam: { questions: 10, timeLimit: 60, passingScore: 80 }
-          }
-        }
-        
-        document.dispatchEvent(new CustomEvent('course-created', {
-          detail: fallbackCourse
-        }))
-      } finally {
-        submitButton.textContent = originalText
-        submitButton.disabled = false
+        submitButton.textContent = originalText;
+        submitButton.disabled = false;
       }
-    })
+    });
   }
 
   showCourseInterface(course, aiManager) {
@@ -771,27 +1361,44 @@ Are you ready to begin your first lesson?`
     
     if (type === 'user' && aiManager) {
       this.showTypingIndicator()
-      
       try {
         const response = await aiManager.generateResponse(content, course)
         this.hideTypingIndicator()
-        
         const formattedContent = this.formatAIResponse(response.content)
         this.addMessageToUI('ai', formattedContent)
-        
+        // Scroll to the first AI message in the latest reply (icon at the top)
+        const messagesContainer = document.getElementById('chat-messages');
+        if (messagesContainer) {
+          // Find all AI messages
+          const aiMessages = messagesContainer.querySelectorAll('.message.ai');
+          if (aiMessages.length > 0) {
+            aiMessages[0].scrollIntoView({ block: 'start', behavior: 'auto' });
+            messagesContainer.scrollTop = aiMessages[0].offsetTop;
+          } else {
+            messagesContainer.scrollTop = 0;
+          }
+        }
+
         if (response.progressUpdate) {
           this.updateLessonStatus(response.progressUpdate.lessonCompleted)
           this.updateProgressBar(response.progressUpdate.newProgress)
         }
-        
-        if (response.suggestedVideos && response.suggestedVideos.length > 0) {
-          this.showVideoSuggestions(response.suggestedVideos)
+
+        // Await video suggestions if extractVideoSuggestions is async
+        if (response.suggestedVideos) {
+          let videos = response.suggestedVideos;
+          if (typeof videos.then === 'function') {
+            videos = await videos;
+          }
+          if (videos && videos.length > 0) {
+            this.showVideoSuggestions(videos);
+          }
         }
-        
+
         if (response.followUpQuestions && response.followUpQuestions.length > 0) {
           this.showFollowUpQuestions(response.followUpQuestions)
         }
-        
+
         if (response.needsSubspace) {
           this.suggestSubspace(content, course)
         }
@@ -842,7 +1449,12 @@ Are you ready to begin your first lesson?`
     `
     
     messagesContainer.appendChild(messageDiv)
-    messagesContainer.scrollTop = messagesContainer.scrollHeight
+    // If the message is from AI, scroll to the top so user sees the start of the response
+    if (type === 'ai') {
+      messagesContainer.scrollTop = 0;
+    } else {
+      messagesContainer.scrollTop = messagesContainer.scrollHeight;
+    }
   }
 
   showTypingIndicator() {
@@ -899,24 +1511,45 @@ Are you ready to begin your first lesson?`
   }
 
   showVideoSuggestions(videos) {
-    const messagesContainer = document.getElementById('chat-messages')
-    const videoDiv = document.createElement('div')
-    videoDiv.className = 'message ai slide-up'
+    const messagesContainer = document.getElementById('chat-messages');
+    const videoDiv = document.createElement('div');
+    videoDiv.className = 'message ai slide-up';
     videoDiv.innerHTML = `
       <div class="message-avatar">🎥</div>
       <div class="message-content">
         <strong>Suggested Videos:</strong><br>
-        ${videos.map(video => `
-          <div style="margin: 0.5rem 0; padding: 0.5rem; background: rgba(139, 92, 246, 0.1); border-radius: 8px;">
-            📺 <strong>${video.title}</strong><br>
-            <small>Duration: ${video.duration}</small>
+        ${videos.map((video, idx) => `
+          <div class="suggested-video-box" style="margin: 0.5rem 0; padding: 0.5rem; background: rgba(139, 92, 246, 0.1); border-radius: 8px; display: flex; align-items: center; gap: 1rem;">
+            <img src="${video.thumbnail}" alt="${video.title}" style="width: 120px; height: 68px; border-radius: 6px; object-fit: cover; cursor: pointer;" data-vidx="${idx}">
+            <div style="flex:1;">
+              <div style="font-weight: bold;">${video.title}</div>
+              <div style="font-size: 0.9em; color: #666;">Duration: ${video.duration}</div>
+              <button class="expand-video-btn" data-vidx="${idx}" style="margin-top: 0.5rem; padding: 0.3rem 0.8rem; border-radius: 4px; border: none; background: #8b5cf6; color: #fff; cursor: pointer;">Play</button>
+            </div>
+          </div>
+          <div class="expandable-video-player" id="expandable-video-${idx}" style="display:none; margin: 0.5rem 0 1rem 0;">
+            <iframe width="100%" height="315" src="https://www.youtube.com/embed/${video.videoId}" title="YouTube video player" frameborder="0" allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share" allowfullscreen></iframe>
           </div>
         `).join('')}
       </div>
-    `
-    
-    messagesContainer.appendChild(videoDiv)
-    messagesContainer.scrollTop = messagesContainer.scrollHeight
+    `;
+    messagesContainer.appendChild(videoDiv);
+    messagesContainer.scrollTop = messagesContainer.scrollHeight;
+
+    // Add expand/collapse logic for video player
+    videoDiv.querySelectorAll('.expand-video-btn, img[data-vidx]').forEach(el => {
+      el.addEventListener('click', (e) => {
+        const idx = e.target.getAttribute('data-vidx');
+        const player = videoDiv.querySelector(`#expandable-video-${idx}`);
+        if (player.style.display === 'none') {
+          player.style.display = 'block';
+          e.target.textContent = 'Hide';
+        } else {
+          player.style.display = 'none';
+          e.target.textContent = 'Play';
+        }
+      });
+    });
   }
 
   showFollowUpQuestions(questions) {
@@ -1422,5 +2055,401 @@ Are you ready to begin your first lesson?`
       .replace(/\n/g, '<br>')
     
     return formatted
+  }
+
+  setupCourseGeneration(sessionId) {
+    const generateBtn = document.getElementById('generate-course-btn');
+    const titleInput = document.getElementById('manual-course-title');
+    const notesInput = document.getElementById('course-notes');
+    const contentDisplay = document.getElementById('content-display');
+    
+    // Check if elements exist
+    if (!generateBtn) {
+      console.error('Generate course button not found');
+      return;
+    }
+    
+    if (!titleInput) {
+      console.error('Manual course title input not found');
+      return;
+    }
+    
+    if (!contentDisplay) {
+      console.error('Content display not found');
+      return;
+    }
+    
+    const btnText = generateBtn.querySelector('.btn-text');
+    const btnLoader = generateBtn.querySelector('.btn-loader');
+    
+    generateBtn.onclick = async () => {
+      const title = titleInput.value.trim();
+      const notes = notesInput ? notesInput.value.trim() : '';
+      const extractedContent = contentDisplay.value.trim();
+      
+      if (!title) {
+        alert('Please enter a course title');
+        return;
+      }
+      
+      if (!extractedContent) {
+        alert('No content available for course generation. Please ensure files have been analyzed.');
+        return;
+      }
+      
+      // Show loading state
+      if (btnText) btnText.style.display = 'none';
+      if (btnLoader) btnLoader.style.display = 'inline-block';
+      generateBtn.disabled = true;
+      
+      try {
+        const response = await fetch('http://localhost:5000/api/generate-course', {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({
+            session_id: sessionId,
+            course_title: title,
+            extracted_content: extractedContent,
+            additional_notes: notes
+          })
+        });
+        
+        const result = await response.json();
+        
+        if (result.success) {
+          this.displayCourseStructure(result.course_structure);
+        } else {
+          alert(`Error: ${result.error}`);
+        }
+      } catch (error) {
+        console.error('Course generation error:', error);
+        alert('Failed to generate course. Please try again.');
+      } finally {
+        // Reset button state
+        if (btnText) btnText.style.display = 'inline';
+        if (btnLoader) btnLoader.style.display = 'none';
+        generateBtn.disabled = false;
+      }
+    };
+  }
+  
+  displayCourseStructure(structure) {
+    const courseStructureSection = document.getElementById('course-structure-section');
+    const courseStructureDisplay = document.getElementById('course-structure-display');
+    
+    // Check if elements exist
+    if (!courseStructureSection) {
+      console.error('Course structure section not found');
+      return;
+    }
+    
+    if (!courseStructureDisplay) {
+      console.error('Course structure display not found');
+      return;
+    }
+    
+    courseStructureDisplay.innerHTML = `
+      <div class="course-structure-container">
+        <div class="course-header">
+          <h4 class="course-title">${structure.title}</h4>
+          <div class="course-meta">
+            <span class="course-duration">⏱️ ${structure.estimated_duration}</span>
+            <span class="course-difficulty">📊 ${structure.difficulty_level}</span>
+          </div>
+        </div>
+        
+        <div class="course-overview">
+          <h5>Course Overview</h5>
+          <p>${structure.overview}</p>
+        </div>
+        
+        <div class="learning-objectives">
+          <h5>Learning Objectives</h5>
+          <ul>
+            ${structure.learning_objectives.map(obj => `<li>${obj}</li>`).join('')}
+          </ul>
+        </div>
+        
+        <div class="course-modules">
+          <h5>Course Modules</h5>
+          <div class="modules-grid">
+            ${structure.modules.map(module => `
+              <div class="module-card">
+                <div class="module-header">
+                  <h6>${module.title}</h6>
+                  <span class="module-time">${module.estimated_time}</span>
+                </div>
+                <p class="module-description">${module.description}</p>
+                <div class="module-topics">
+                  <strong>Topics:</strong>
+                  <ul>
+                    ${module.topics.map(topic => `<li>${topic}</li>`).join('')}
+                  </ul>
+                </div>
+              </div>
+            `).join('')}
+          </div>
+        </div>
+        
+        <div class="key-topics">
+          <h5>Key Topics Covered</h5>
+          <div class="topics-tags">
+            ${structure.key_topics.map(topic => `<span class="topic-tag">${topic}</span>`).join('')}
+          </div>
+        </div>
+        
+        <div class="course-actions">
+          <button class="btn btn-primary" onclick="window.print()">
+            📄 Print Course Structure
+          </button>
+          <button class="btn btn-secondary" onclick="copyToClipboard()">
+            📋 Copy to Clipboard
+          </button>
+        </div>
+      </div>
+    `;
+    
+    courseStructureSection.style.display = 'block';
+    courseStructureSection.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  displayAnalysisResults(progress, sessionId, analysisComplete) {
+    console.log('displayAnalysisResults called with:', progress);
+    
+    const analysisResults = document.getElementById('analysis-results');
+    const overallScore = document.getElementById('overall-score');
+    const fileResults = document.getElementById('file-results');
+    const contentDisplaySection = document.getElementById('content-display-section');
+    const contentDisplay = document.getElementById('content-display');
+    const courseGenerationSection = document.getElementById('course-generation-section');
+    
+    console.log('DOM elements found:', {
+      analysisResults: !!analysisResults,
+      overallScore: !!overallScore,
+      fileResults: !!fileResults,
+      contentDisplaySection: !!contentDisplaySection,
+      contentDisplay: !!contentDisplay,
+      courseGenerationSection: !!courseGenerationSection
+    });
+    
+    // Check if elements exist before trying to access them
+    if (!analysisResults) {
+      console.error('Analysis results element not found');
+      return;
+    }
+    
+    // Show overall score
+    if (overallScore) {
+      const scoreColor = SkoolMeAPI.getStatusColor(progress.overall_score);
+      const scoreText = SkoolMeAPI.getStatusText(progress.overall_score);
+      
+      overallScore.innerHTML = `
+        <div class="score-item" style="color: ${scoreColor};">
+          <span class="score-value">${progress.overall_score.toFixed(1)}%</span>
+          <span class="score-label">${scoreText} Analysis</span>
+        </div>
+      `;
+    }
+    
+    // Show extracted content if available
+    if (progress.all_content && progress.all_content.trim()) {
+      console.log('Content found, length:', progress.all_content.length);
+      if (contentDisplay) {
+        contentDisplay.value = progress.all_content;
+      }
+      if (contentDisplaySection) {
+        contentDisplaySection.style.display = 'block !important';
+        contentDisplaySection.style.visibility = 'visible !important';
+        contentDisplaySection.style.opacity = '1 !important';
+        contentDisplaySection.classList.remove('hidden');
+        contentDisplaySection.classList.add('visible');
+      }
+    } else {
+      console.log('No content found, showing fallback message');
+      // If no content was extracted, show a message
+      if (contentDisplay) {
+        contentDisplay.value = "No text content was extracted from the uploaded files. You can still create a course by providing a title and additional notes below.";
+      }
+      if (contentDisplaySection) {
+        contentDisplaySection.style.display = 'block !important';
+        contentDisplaySection.style.visibility = 'visible !important';
+        contentDisplaySection.style.opacity = '1 !important';
+        contentDisplaySection.classList.remove('hidden');
+        contentDisplaySection.classList.add('visible');
+      }
+    }
+    
+    // Show course title section after analysis
+    const courseTitleSection = document.getElementById('course-title-section');
+    if (courseTitleSection) {
+      console.log('Showing course title section');
+      courseTitleSection.style.display = 'block !important';
+      courseTitleSection.style.visibility = 'visible !important';
+      courseTitleSection.style.opacity = '1 !important';
+      courseTitleSection.classList.remove('hidden');
+      courseTitleSection.classList.add('visible');
+    } else {
+      console.error('Course title section not found!');
+    }
+    
+    // Always show course generation section after analysis
+    if (courseGenerationSection) {
+      console.log('Showing course generation section');
+      courseGenerationSection.style.display = 'block !important';
+      courseGenerationSection.style.visibility = 'visible !important';
+      courseGenerationSection.style.opacity = '1 !important';
+      courseGenerationSection.classList.remove('hidden');
+      courseGenerationSection.classList.add('visible');
+      
+      // Set up course generation button
+      this.setupCourseGeneration(progress.session_id || sessionId);
+      
+      // Also set up the main form submission for the upload method
+      const createCourseBtn = document.getElementById('create-course-btn');
+      if (createCourseBtn) {
+        createCourseBtn.style.display = 'inline-block !important';
+        createCourseBtn.disabled = false;
+        createCourseBtn.textContent = '🚀 Create Course from Analysis';
+      }
+    } else {
+      console.error('Course generation section not found!');
+    }
+    
+    // Show file results
+    if (fileResults && progress.results) {
+      fileResults.innerHTML = progress.results.map(result => {
+        const statusColor = SkoolMeAPI.getStatusColor(result.score);
+        const statusText = SkoolMeAPI.getStatusText(result.score);
+        
+        return `
+          <div class="file-result">
+            <div class="file-result-header">
+              <span class="file-name">${result.filename}</span>
+              <span class="file-score" style="color: ${statusColor};">
+                ${result.score.toFixed(1)}% - ${statusText}
+              </span>
+            </div>
+            ${result.error ? `<div class="file-error">Error: ${result.error}</div>` : ''}
+          </div>
+        `;
+      }).join('');
+    }
+    
+    // Update final file status
+    const fileItems = document.querySelectorAll('.file-item');
+    if (progress.results) {
+      progress.results.forEach((result, index) => {
+        if (fileItems[index]) {
+          const statusElement = fileItems[index].querySelector('.file-status');
+          if (statusElement) {
+            const statusColor = SkoolMeAPI.getStatusColor(result.score);
+            const statusText = result.score >= 80 ? '✅ Good' : 
+                              result.score >= 30 ? '⚠️ Partial' : '❌ Poor';
+            
+            statusElement.textContent = statusText;
+            statusElement.style.color = statusColor;
+          }
+        }
+      });
+    }
+    
+    // Force show analysis results with !important
+    analysisResults.style.display = 'block !important';
+    analysisResults.style.visibility = 'visible !important';
+    analysisResults.style.opacity = '1 !important';
+    analysisResults.classList.remove('hidden');
+    analysisResults.classList.add('visible');
+    
+    // Scroll to the course generation section
+    if (courseGenerationSection) {
+      setTimeout(() => {
+        courseGenerationSection.scrollIntoView({ behavior: 'smooth', block: 'start' });
+      }, 500);
+    }
+    
+    console.log('displayAnalysisResults completed');
+    
+    // Add a final check to ensure elements are visible
+    setTimeout(() => {
+      console.log('Final visibility check:');
+      console.log('contentDisplaySection visible:', contentDisplaySection ? window.getComputedStyle(contentDisplaySection).display : 'element not found');
+      console.log('courseGenerationSection visible:', courseGenerationSection ? window.getComputedStyle(courseGenerationSection).display : 'element not found');
+    }, 1000);
+  }
+
+  clearPreviousAnalysis() {
+    try {
+      // Clear analysis results
+      const analysisResults = document.getElementById('analysis-results');
+      if (analysisResults) {
+        analysisResults.innerHTML = '';
+      }
+      
+      // Reset course structure section
+      const courseStructureSection = document.getElementById('course-structure-section');
+      if (courseStructureSection) {
+        courseStructureSection.style.display = 'none';
+      }
+      
+      // Reset course structure display
+      const courseStructureDisplay = document.getElementById('course-structure-display');
+      if (courseStructureDisplay) {
+        courseStructureDisplay.innerHTML = '';
+      }
+      
+      // Reset progress bar
+      const progressFill = document.getElementById('progress-fill');
+      const progressText = document.getElementById('progress-text');
+      if (progressFill) {
+        progressFill.style.width = '0%';
+      }
+      if (progressText) {
+        progressText.textContent = 'Starting analysis...';
+      }
+      
+      // Reset course title inputs
+      const courseTitleInput = document.getElementById('course-title-input');
+      const manualCourseTitleInput = document.getElementById('manual-course-title');
+      if (courseTitleInput) {
+        courseTitleInput.value = '';
+      }
+      if (manualCourseTitleInput) {
+        manualCourseTitleInput.value = '';
+      }
+      
+      // Reset course notes
+      const courseNotesInput = document.getElementById('course-notes');
+      if (courseNotesInput) {
+        courseNotesInput.value = '';
+      }
+      
+      // Reset create course button
+      const createCourseBtn = document.getElementById('create-course-btn');
+      if (createCourseBtn) {
+        createCourseBtn.style.display = 'none';
+        createCourseBtn.disabled = true;
+      }
+      
+      // Reset analysis complete flag - use window scope to avoid reference errors
+      // Since analysisComplete is a local variable, we'll let it be reset in the method scope
+      
+      // Remove processing note if it exists
+      const processingNote = document.querySelector('.processing-note');
+      if (processingNote) {
+        processingNote.remove();
+      }
+      
+      // Clear any error messages
+      const errorMessages = document.querySelectorAll('.error-message, .alert-error');
+      errorMessages.forEach(msg => {
+        if (msg) msg.remove();
+      });
+      
+    } catch (error) {
+      console.log('Error clearing previous analysis:', error);
+      // Don't throw the error to prevent breaking the analysis flow
+    }
   }
 }

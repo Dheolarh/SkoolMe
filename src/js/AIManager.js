@@ -8,16 +8,45 @@ export class AIManager {
     this.chatSession = null
     this.lastSubspaceSuggestion = 0 // Timestamp of last subspace suggestion
     this.subspaceCooldown = 60000 // 1 minute cooldown between suggestions
+    this.isInitialized = false
+    this.lastError = null
   }
 
   async init() {
     try {
+      console.log('Initializing Gemini AI with API key:', this.apiKey ? 'Available' : 'Missing')
+      
+      if (!this.apiKey) {
+        throw new Error('API key is missing. Please set VITE_GOOGLE_API_KEY environment variable.')
+      }
+      
+      if (!this.apiKey.startsWith('AIza')) {
+        throw new Error('Invalid API key format. API key should start with "AIza"')
+      }
+      
       this.genAI = new GoogleGenerativeAI(this.apiKey)
       this.model = this.genAI.getGenerativeModel({ model: "gemini-1.5-flash" })
+      
+      // Test the connection with a simple request
+      const testResult = await this.model.generateContent("Test")
+      await testResult.response
+      
+      this.isInitialized = true
+      this.lastError = null
       console.log('Gemini AI initialized successfully')
       return true
     } catch (error) {
+      this.lastError = error
       console.error('Failed to initialize Gemini AI:', error)
+      
+      if (error.message.includes('API key')) {
+        console.error('API key issue detected. Please check your Google AI API key.')
+      } else if (error.message.includes('quota') || error.message.includes('limit')) {
+        console.error('API quota exceeded. Please check your Google AI usage limits.')
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        console.error('Network error. Please check your internet connection.')
+      }
+      
       return false
     }
   }
@@ -325,28 +354,116 @@ You can now download your complete course materials for future reference.`
       }
     } catch (error) {
       console.error('Error generating AI response:', error)
+      this.lastError = error
+      
+      let errorMessage = "I apologize, but I'm having trouble processing your question right now."
+      
+      if (error.message.includes('API key') || error.message.includes('authentication')) {
+        errorMessage = "There's an issue with the AI service authentication. Please check the API configuration."
+      } else if (error.message.includes('quota') || error.message.includes('limit')) {
+        errorMessage = "The AI service has reached its usage limit. Please try again later."
+      } else if (error.message.includes('network') || error.message.includes('fetch')) {
+        errorMessage = "There's a network connection issue. Please check your internet connection and try again."
+      } else if (error.message.includes('timeout')) {
+        errorMessage = "The AI service is taking too long to respond. Please try again."
+      }
+      
       return {
-        content: "I apologize, but I'm having trouble processing your question right now. Could you please rephrase it or try asking something else?",
+        content: errorMessage + " Could you please rephrase it or try asking something else?",
         suggestedVideos: [],
-        followUpQuestions: ["Would you like me to explain this concept differently?", "Should we move on to the next topic?"],
+        followUpQuestions: ["Would you like me to explain this concept differently?", "Should we move on to the next topic?", "Try asking a simpler question"],
         needsSubspace: false
       }
     }
   }
 
-  extractVideoSuggestions(text) {
-    // Look for video suggestions in the AI response
-    const videoKeywords = ['video', 'watch', 'youtube', 'tutorial', 'demonstration']
-    if (videoKeywords.some(keyword => text.toLowerCase().includes(keyword))) {
-      return [
-        {
-          title: "Related Tutorial Video",
-          url: "#", // In real implementation, would search YouTube API
-          duration: "10:30"
-        }
-      ]
+  async extractVideoSuggestions(text) {
+
+    // Use YouTube Data API to fetch real videos based on the chat context (user + AI response + lesson/topic)
+    const videoKeywords = ['video', 'watch', 'youtube', 'tutorial', 'demonstration', 'explain', 'lesson'];
+    if (!videoKeywords.some(keyword => text.toLowerCase().includes(keyword))) {
+      return [];
     }
-    return []
+
+    // Try to get the last user message from the chat container for better context
+    let userMessage = '';
+    try {
+      const chatMessages = document.querySelectorAll('.message.user .message-content');
+      if (chatMessages.length > 0) {
+        userMessage = chatMessages[chatMessages.length - 1].innerText || '';
+      }
+    } catch (e) {}
+
+    // Try to get the current lesson/topic title if available
+    let lessonTitle = '';
+    try {
+      const lessonHeader = document.querySelector('.lesson-title, .chat-title');
+      if (lessonHeader) {
+        lessonTitle = lessonHeader.innerText || '';
+      }
+    } catch (e) {}
+
+    // Prefer a query that is most likely to yield an educational video
+    let query = '';
+    if (userMessage && userMessage.length > 10 && /video|tutorial|explain|lesson|how to|show/i.test(userMessage)) {
+      query = userMessage + ' tutorial';
+    } else if (lessonTitle && lessonTitle.length > 5) {
+      query = lessonTitle + ' tutorial';
+    } else {
+      query = text + ' tutorial';
+    }
+    // Limit to 12 words for search
+    query = query.split(/\s+/).slice(0, 12).join(' ');
+
+    // Use VITE_YOUTUBE_API_KEY for YouTube API requests, fallback to VITE_GOOGLE_API_KEY
+    const apiKey = import.meta.env.VITE_YOUTUBE_API_KEY || window.VITE_YOUTUBE_API_KEY || import.meta.env.VITE_GOOGLE_API_KEY || window.VITE_GOOGLE_API_KEY;
+    if (!apiKey) return [];
+
+    try {
+      // Search for up to 5 videos for better filtering
+      const searchUrl = `https://www.googleapis.com/youtube/v3/search?part=snippet&type=video&maxResults=5&q=${encodeURIComponent(query)}&key=${apiKey}`;
+      const searchRes = await fetch(searchUrl);
+      const searchData = await searchRes.json();
+      if (!searchData.items || searchData.items.length === 0) return [];
+
+      // Get video IDs for details
+      const videoIds = searchData.items.map(item => item.id.videoId).filter(Boolean).join(',');
+      if (!videoIds) return [];
+      const detailsUrl = `https://www.googleapis.com/youtube/v3/videos?part=contentDetails,snippet&id=${videoIds}&key=${apiKey}`;
+      const detailsRes = await fetch(detailsUrl);
+      const detailsData = await detailsRes.json();
+      if (!detailsData.items || detailsData.items.length === 0) return [];
+
+      // Parse ISO 8601 duration to readable format
+      function parseDuration(iso) {
+        const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        const h = match[1] ? match[1] + ':' : '';
+        const m = match[2] ? (match[1] ? match[2].padStart(2, '0') : match[2]) : '00';
+        const s = match[3] ? match[3].padStart(2, '0') : '00';
+        return h + m + ':' + s;
+      }
+
+      // Filter out Shorts and prefer videos longer than 60 seconds
+      const filtered = detailsData.items.filter(item => {
+        const iso = item.contentDetails.duration;
+        const match = iso.match(/PT(?:(\d+)H)?(?:(\d+)M)?(?:(\d+)S)?/);
+        const seconds = (parseInt(match[1]||0)*3600) + (parseInt(match[2]||0)*60) + (parseInt(match[3]||0));
+        return seconds >= 60;
+      });
+      if (filtered.length === 0) return [];
+      const details = filtered[0];
+      const videoId = details.id;
+
+      return [{
+        title: details.snippet.title,
+        videoId,
+        url: `https://www.youtube.com/watch?v=${videoId}`,
+        duration: parseDuration(details.contentDetails.duration),
+        thumbnail: details.snippet.thumbnails.medium.url
+      }];
+    } catch (e) {
+      return [];
+    }
   }
 
   extractFollowUpQuestions(text) {

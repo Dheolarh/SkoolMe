@@ -25,6 +25,9 @@ export class AppManager {
     await this.aiManager.init()
     this.courseManager.setAIManager(this.aiManager)
     
+    // Make AI manager globally available for debugging
+    window.aiManager = this.aiManager
+    
     // Set up event listeners
     this.setupEventListeners()
     
