@@ -452,7 +452,7 @@ export class UIManager {
 
                 <!-- Additional Notes Section (for upload method) - Always visible when upload method is selected -->
                 <div class="form-group" id="additional-notes-section" style="display: none;">
-                  <label class="form-label">Additional Notes (Optional)</label>
+                  <label class="form-label">Additional Notes (Recommended)</label>
                   <textarea id="course-notes" 
                             class="form-input form-textarea" 
                             placeholder="Any specific focus areas or additional context for course generation..."></textarea>
@@ -880,6 +880,7 @@ export class UIManager {
         processingNote.innerHTML = `
           <strong>⏱️ Processing Time Note:</strong><br>
           • Documents: Usually 10-30 seconds<br>
+          • Handwritten Notes: Usually 2-7 minutes<br>
           • Audio files: 1-2 minutes per minute of audio<br>
           • Larger files may take longer - progress is tracked in real-time
         `;
