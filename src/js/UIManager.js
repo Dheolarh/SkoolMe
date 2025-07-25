@@ -1001,10 +1001,11 @@ export class UIManager {
           title = manualTitleInput.value.trim();
           notes = courseNotesInput ? courseNotesInput.value.trim() : '';
           const extractedContent = contentDisplay.value.trim();
+          const apiUrl = import.meta.env.VITE_API_URL || 'https://skoolmebackend-695368262076.europe-west1.run.app'
           
           // For upload method, use the backend API to generate course structure
           try {
-            const response = await fetch('http://localhost:5000/api/generate-course', {
+            const response = await fetch('${apiUrl}/api/generate-course', {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -2086,6 +2087,8 @@ Are you ready to begin your first lesson?`
       const title = titleInput.value.trim();
       const notes = notesInput ? notesInput.value.trim() : '';
       const extractedContent = contentDisplay.value.trim();
+      const apiUrl = import.meta.env.VITE_API_URL || 'https://skoolmebackend-695368262076.europe-west1.run.app'
+
       
       if (!title) {
         alert('Please enter a course title');
@@ -2103,7 +2106,7 @@ Are you ready to begin your first lesson?`
       generateBtn.disabled = true;
       
       try {
-        const response = await fetch('http://localhost:5000/api/generate-course', {
+        const response = await fetch('${apiUrl}/api/generate-course', {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
