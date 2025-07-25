@@ -1005,7 +1005,7 @@ export class UIManager {
           
           // For upload method, use the backend API to generate course structure
           try {
-            const response = await fetch('${apiUrl}/api/generate-course', {
+            const response = await fetch(`${apiUrl}/api/generate-course`, {
               method: 'POST',
               headers: {
                 'Content-Type': 'application/json',
@@ -2106,7 +2106,7 @@ Are you ready to begin your first lesson?`
       generateBtn.disabled = true;
       
       try {
-        const response = await fetch('${apiUrl}/api/generate-course', {
+        const response = await fetch(`${apiUrl}/api/generate-course`, {
           method: 'POST',
           headers: {
             'Content-Type': 'application/json',
