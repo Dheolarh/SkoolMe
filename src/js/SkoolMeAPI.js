@@ -4,7 +4,7 @@
  */
 
 class SkoolMeAPI {
-  constructor(baseURL = import.meta.env.VITE_API_URL || 'http://localhost:8080') {
+  constructor(baseURL = import.meta.env.VITE_API_URL || 'https://skoolmebackend-695368262076.europe-west1.run.app') {
     this.baseURL = baseURL;
     this.currentSessionId = null;
   }
