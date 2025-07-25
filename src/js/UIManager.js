@@ -73,7 +73,16 @@ export class UIManager {
         </div>
       </div>
     `
-    
+    // Add CSS to only show hamburger when body.show-hamburger is present
+    if (!document.getElementById('hamburger-visibility-style')) {
+      const style = document.createElement('style');
+      style.id = 'hamburger-visibility-style';
+      style.textContent = `
+        #hamburger-menu { display: none !important; }
+        body.show-hamburger #hamburger-menu { display: flex !important; }
+      `;
+      document.head.appendChild(style);
+    }
     document.body.insertBefore(header, this.app)
 
     // Add event listeners
@@ -255,7 +264,7 @@ export class UIManager {
             </div>
             <div class="dashboard-actions">
               <button class="btn btn-primary" id="new-course-btn">
-                ➕ Create New Course
+                📖 Create New Course
               </button>
             </div>
           </div>
