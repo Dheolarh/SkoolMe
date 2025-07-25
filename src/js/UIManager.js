@@ -112,6 +112,7 @@ export class UIManager {
 
 
   showWelcomeScreen() {
+    document.body.classList.remove('show-hamburger');
     this.app.innerHTML = `
       <div class="main-content">
         <div class="container">
@@ -304,6 +305,7 @@ export class UIManager {
   }
 
   showApiKeyModal() {
+    document.body.classList.remove('show-hamburger');
     const modal = document.createElement('div')
     modal.className = 'modal-overlay'
     modal.innerHTML = `
@@ -356,6 +358,7 @@ export class UIManager {
   }
 
   showCourseCreation() {
+    document.body.classList.remove('show-hamburger');
     this.app.innerHTML = `
       <div class="main-content">
         <div class="container">
@@ -1133,6 +1136,7 @@ export class UIManager {
   }
 
   showCourseInterface(course, aiManager) {
+    document.body.classList.add('show-hamburger');
     this.app.innerHTML = `
       <div class="sidebar-overlay" id="sidebar-overlay"></div>
       <div class="main-content">
@@ -1183,7 +1187,6 @@ export class UIManager {
         </div>
       </div>
     `
-    document.getElementById('hamburger-menu').style.display = 'flex';
     document.querySelector('.header-content').classList.remove('no-hamburger');
 
 
@@ -1830,6 +1833,7 @@ Are you ready to begin your first lesson?`
   }
 
   showAboutModal() {
+    document.body.classList.remove('show-hamburger');
     const modal = document.createElement('div')
     modal.className = 'modal-overlay'
     modal.innerHTML = `
