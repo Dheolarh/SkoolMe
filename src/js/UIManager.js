@@ -79,7 +79,9 @@ export class UIManager {
       style.id = 'hamburger-visibility-style';
       style.textContent = `
         #hamburger-menu { display: none !important; }
-        body.show-hamburger #hamburger-menu { display: flex !important; }
+        @media (max-width: 768px) {
+          body.show-hamburger #hamburger-menu { display: flex !important; }
+        }
       `;
       document.head.appendChild(style);
     }
